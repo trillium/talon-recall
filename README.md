@@ -32,7 +32,8 @@ Recall is fully self-contained. It includes everything you need to get started w
 - Number input (speaking numbers to press number keys)
 - Mode switching (command, dictation, and mixed modes)
 - A mode indicator (colored dot showing your current mode)
-- Basic keyboard commands (enter, escape, backspace, arrows, etc.)
+- Basic keyboard commands (escape, backspace, arrows, etc.)
+- **Ender words** — say "bravely" to press Enter after dictation, or by itself to just press Enter
 
 If you later install [talonhub/community](https://github.com/talonhub/community) (the standard Talon command set), Recall automatically detects it and uses community's richer implementations instead of its own built-in shims.
 
@@ -97,15 +98,21 @@ Say the name followed by what you want to type:
 
 This switches to edgar's window and types "hello world".
 
-### Dictating and pressing Enter
+### Pressing Enter
 
-Add "bravely" at the end to press Enter after typing:
+Recall uses **ender words** — a word you say at the end of a phrase to press Enter. The default ender word is **"bravely"**.
+
+There are three ways to use it:
 
 ```
-"edgar hello world bravely"
+"bravely"                     → just presses Enter (in dictation/mixed mode)
+"hello world bravely"         → types "hello world" then presses Enter
+"edgar hello world bravely"   → switches to edgar, types, then presses Enter
 ```
 
-This is useful for chat apps, terminal commands, and anywhere you want to type and submit in one breath. The word "bravely" is configurable — edit `dictation_ender.talon-list` to change it.
+The ender word is configurable — edit `dictation_ender.talon-list` to change it or add alternatives. The `$` end-of-utterance marker ensures the ender word is only recognized at the very end of what you say, so it won't interfere with normal dictation containing the word mid-sentence.
+
+In command mode, you can also say `"slap"` to press Enter.
 
 ### Pressing a number key
 
@@ -126,6 +133,8 @@ This switches to the window and presses the number key. Useful for selecting num
 | `"<name> <dictation>"` | Dictate text into a window |
 | `"<name> <dictation> bravely"` | Dictate + press Enter |
 | `"<name> <number>"` | Press a number key |
+| `"bravely"` | Press Enter (dictation/mixed mode) |
+| `"<dictation> bravely"` | Type + press Enter (dictation/mixed mode) |
 | `"recall restore <name>"` | Relaunch a terminal at saved path |
 | `"recall alias <name>"` | Add an alternate name (prompted) |
 | `"recall combine <name>"` | Merge a duplicate entry (prompted) |
@@ -144,6 +153,7 @@ These are included so you can operate without talonhub/community:
 | Command | Key |
 |---------|-----|
 | `"slap"` | Enter |
+| `"bravely"` | Enter (dictation/mixed mode — configurable ender word) |
 | `"escape"` | Escape |
 | `"junk"` | Backspace |
 | `"tabby"` | Tab |
@@ -154,13 +164,22 @@ These are included so you can operate without talonhub/community:
 
 ## Customization
 
+### Ender words
+
+The word "bravely" triggers Enter after dictation. You can change it or add alternatives by editing `dictation_ender.talon-list`:
+
+```
+list: user.dictation_ender
+-
+bravely: bravely
+boldly: boldly
+```
+
+With multiple enders defined, any of them will work at the end of a phrase. The word was chosen because it almost never appears at the end of naturally dictated text, so it won't trigger accidentally.
+
 ### Forbidden names
 
 Some words can't be used as window names because they conflict with commands. Edit `forbidden_recall_names.talon-list` to add or remove reserved words.
-
-### Dictation ender
-
-The word "bravely" triggers Enter after dictation. Edit `dictation_ender.talon-list` to change it or add alternatives.
 
 ### Mode indicator
 
