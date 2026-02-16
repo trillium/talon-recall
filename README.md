@@ -14,15 +14,17 @@ Recall lets you save specific windows and switch between them instantly by voice
 
 ### Talon (beta)
 
-Recall requires [Talon](https://talonvoice.com), a hands-free input system. You need the **beta** version, which includes the speech engine.
+Recall requires [Talon](https://talonvoice.com), a hands-free input system. You need the **beta** version, which includes the Conformer speech engine needed for accurate voice recognition.
 
-1. Download Talon from https://talonvoice.com
-2. Install and launch it — you'll see a Talon icon in your system tray
-3. **Get beta access** by joining the [Talon Slack](https://talonvoice.com/chat) and following the beta instructions
+Talon has a free public version, but the beta provides the speech models that make voice control practical. To get beta access:
 
-### Speech model
+1. **Download Talon** from [talonvoice.com](https://talonvoice.com) (available for Linux, macOS, and Windows)
+2. **Support the developer** on [Patreon](https://www.patreon.com/join/lunixbochs) to unlock beta access — this gets you early features, the Conformer speech model, and priority support
+3. **Link your Patreon** to your Talon account to get beta downloads — instructions are provided after subscribing
+4. **Install the beta** and launch it — you'll see a Talon icon in your system tray
+5. **Download the speech model** — Talon will prompt you on first launch to download the Conformer model, which provides excellent accuracy out of the box
 
-Talon beta ships with the **Conformer** speech model, which provides excellent accuracy out of the box. No additional model setup is required — Talon will prompt you to download it on first launch.
+The [Talon Slack](https://talonvoice.com/chat) community is also an excellent resource for getting help with setup.
 
 ### No other packages required
 
