@@ -26,7 +26,7 @@ from .recall_state import (
     mod, saved_windows, archived_windows,
     pending_ctx, is_forbidden,
     save_to_disk, update_window_list, load_saved_windows,
-    _cancel_pending,
+    _cancel_pending, find_name_for_window_id,
 )
 from .recall_terminal import (
     is_terminal, detect_terminal_path, _parse_title_path, _launch_terminal,
@@ -34,6 +34,42 @@ from .recall_terminal import (
 from .recall_commands import (
     find_window_by_id, rematch_window, _resolve_command, _run_when_ready,
 )
+
+
+def _on_focus_change(window: ui.Window):
+    """When focus changes and persistent highlight is enabled, update the border."""
+    if not recall_state._persistent_highlight_enabled:
+        return
+    try:
+        wid = window.id
+    except Exception:
+        return
+    name = find_name_for_window_id(wid)
+    if name:
+        recall_overlay.show_persistent_highlight(window, name)
+    else:
+        recall_overlay.clear_persistent_highlight()
+
+
+def _activate_persistent_highlight():
+    """Highlight the current window if it's a saved one."""
+    try:
+        window = ui.active_window()
+        name = find_name_for_window_id(window.id)
+        if name:
+            recall_overlay.show_persistent_highlight(window, name)
+    except Exception:
+        pass
+
+
+def _deactivate_persistent_highlight():
+    """Turn off the persistent highlight entirely."""
+    recall_overlay.hide_persistent_highlight()
+
+
+def _on_screen_change(screen):
+    """Rebuild persistent canvas when monitors change."""
+    recall_overlay.rebuild_persistent_canvas()
 
 
 def archive_window(name: str, info: dict):
@@ -85,6 +121,10 @@ class Actions:
         update_window_list()
         recall_overlay.highlight_window(window, name)
 
+        # Update persistent highlight if enabled (focus doesn't re-fire for already-focused window)
+        if recall_state._persistent_highlight_enabled:
+            recall_overlay.show_persistent_highlight(window, name)
+
     def recall_window(name: str):
         """Focus the saved window with the given name, with re-match fallback"""
         if name not in saved_windows:
@@ -135,6 +175,10 @@ class Actions:
         save_to_disk()
         update_window_list()
         recall_overlay.flash(f'forgot "{name}" (archived)')
+
+        # Clear persistent highlight if the forgotten window was highlighted
+        if recall_state._persistent_highlight_enabled:
+            recall_overlay.clear_persistent_highlight()
 
     def forget_all_windows():
         """Archive all saved windows"""
@@ -488,6 +532,17 @@ class Actions:
         commands_file = Path(__file__).parent / "recall_commands.talon-list"
         actions.user.edit_text_file(str(commands_file))
 
+    def recall_toggle_border():
+        """Toggle the persistent window border on/off"""
+        recall_state._persistent_highlight_enabled = not recall_state._persistent_highlight_enabled
+        save_to_disk()
+        if recall_state._persistent_highlight_enabled:
+            _activate_persistent_highlight()
+            recall_overlay.flash("recall border: ON")
+        else:
+            _deactivate_persistent_highlight()
+            recall_overlay.flash("recall border: OFF")
+
     def restore_window(name: str):
         """Restore a saved terminal window by launching a new one at the saved path"""
         if name not in saved_windows:
@@ -570,6 +625,12 @@ def on_ready():
     load_saved_windows()
     ui.register("win_close", cleanup_closed_windows)
     ui.register("win_title", _on_title_change)
+    ui.register("win_focus", _on_focus_change)
+    ui.register("screen_change", _on_screen_change)
+
+    # Activate persistent highlight if it was enabled before restart
+    if recall_state._persistent_highlight_enabled:
+        _activate_persistent_highlight()
 
 
 app.register("ready", on_ready)

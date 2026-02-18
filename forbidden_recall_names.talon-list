@@ -2,6 +2,7 @@ list: user.forbidden_recall_names
 -
 
 # Recall subcommands
+border: border
 recall: recall
 save: save
 assign: assign

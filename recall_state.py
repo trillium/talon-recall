@@ -37,6 +37,9 @@ saved_windows = {}
 # Archive of forgotten windows: {name: {id, app, title, path, aliases, forgotten_at}}
 archived_windows = {}
 
+# Persistent highlight toggle (survives Talon restarts via _settings in JSON)
+_persistent_highlight_enabled: bool = False
+
 # Forbidden names are defined in forbidden_recall_names.talon-list
 mod.list("forbidden_recall_names", desc="Words that cannot be used as recall window names")
 
@@ -59,6 +62,16 @@ def recall_command_name(m) -> str:
     return str(m[0])
 
 
+def find_name_for_window_id(window_id) -> str | None:
+    """Return the recall name for a given window ID, or None if not saved."""
+    if window_id is None:
+        return None
+    for name, info in saved_windows.items():
+        if info.get("id") == window_id:
+            return name
+    return None
+
+
 def is_forbidden(name: str) -> bool:
     """Check if a name is in the forbidden list"""
     return name.lower() in ctx.lists.get("user.forbidden_recall_names", {}).values()
@@ -66,13 +79,16 @@ def is_forbidden(name: str) -> bool:
 
 def load_saved_windows():
     """Load saved windows from JSON file"""
-    global saved_windows, archived_windows
+    global saved_windows, archived_windows, _persistent_highlight_enabled
     if STORAGE_FILE.exists():
         try:
             with open(STORAGE_FILE, "r") as f:
                 data = json.load(f)
             # Archive lives under "_archive" key, everything else is active
             archived_windows = data.pop("_archive", {})
+            # Settings (persistent_highlight, etc.) live under "_settings"
+            settings = data.pop("_settings", {})
+            _persistent_highlight_enabled = settings.get("persistent_highlight", False)
             saved_windows = data
             update_window_list()
         except Exception as e:
@@ -87,6 +103,9 @@ def save_to_disk():
         data = dict(saved_windows)
         if archived_windows:
             data["_archive"] = archived_windows
+        # Save settings if any are non-default
+        if _persistent_highlight_enabled:
+            data["_settings"] = {"persistent_highlight": True}
         with open(STORAGE_FILE, "w") as f:
             json.dump(data, f, indent=2)
     except Exception as e:

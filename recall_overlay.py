@@ -792,3 +792,144 @@ def hide_highlight():
         _highlight_canvas.unregister("draw", on_draw_highlight)
         _highlight_canvas.close()
         _highlight_canvas = None
+
+
+# ── Persistent window highlight ──────────────────────────────────────
+
+_persistent_canvas: Canvas = None
+_persistent_window = None
+_persistent_name: str = ""
+_persistent_last_rect = None
+_persistent_poll_job = None
+
+PERSISTENT_COLOR = "6a6aff"
+PERSISTENT_ALPHA = "88"
+PERSISTENT_STROKE = 2
+PERSISTENT_LABEL_SIZE = 13
+PERSISTENT_LABEL_PAD_X = 8
+PERSISTENT_LABEL_PAD_Y = 4
+PERSISTENT_POLL_INTERVAL = "200ms"
+
+
+def on_draw_persistent(c: SkiaCanvas):
+    if not _persistent_window:
+        return
+    try:
+        r = _persistent_window.rect
+    except Exception:
+        return
+    if r.width <= 0 or r.height <= 0:
+        return
+
+    # Border around the window
+    c.paint.style = c.paint.Style.STROKE
+    c.paint.stroke_width = PERSISTENT_STROKE
+    c.paint.color = PERSISTENT_COLOR + PERSISTENT_ALPHA
+    c.draw_rect(Rect(r.x, r.y, r.width, r.height))
+    c.paint.style = c.paint.Style.FILL
+
+    # Name label pill at top-center
+    if _persistent_name:
+        c.paint.textsize = PERSISTENT_LABEL_SIZE
+        text_rect = c.paint.measure_text(_persistent_name)[1]
+        text_w = text_rect.width
+        text_h = text_rect.height
+
+        pill_w = text_w + PERSISTENT_LABEL_PAD_X * 2
+        pill_h = text_h + PERSISTENT_LABEL_PAD_Y * 2
+        pill_x = r.x + r.width / 2 - pill_w / 2
+        pill_y = r.y - pill_h - 2
+
+        if pill_y < 0:
+            pill_y = r.y + 4
+
+        # Background
+        c.paint.color = PERSISTENT_COLOR + PERSISTENT_ALPHA
+        pill_rect = Rect(pill_x, pill_y, pill_w, pill_h)
+        _draw_rounded_rect(c, pill_rect, 6)
+
+        # Text
+        c.paint.color = "ffffff" + PERSISTENT_ALPHA
+        c.draw_text(_persistent_name, pill_x + PERSISTENT_LABEL_PAD_X, pill_y + PERSISTENT_LABEL_PAD_Y + text_h)
+
+
+def _persistent_check_geometry():
+    """Cron interval callback: re-freeze canvas if the tracked window moved/resized."""
+    global _persistent_last_rect
+    if not _persistent_window or not _persistent_canvas:
+        return
+    try:
+        r = _persistent_window.rect
+    except Exception:
+        return
+    current = (r.x, r.y, r.width, r.height)
+    if current != _persistent_last_rect:
+        _persistent_last_rect = current
+        _persistent_canvas.freeze()
+
+
+def show_persistent_highlight(window, name: str):
+    """Update the persistent highlight to track the given window."""
+    global _persistent_canvas, _persistent_window, _persistent_name
+    global _persistent_last_rect, _persistent_poll_job
+
+    _persistent_window = window
+    _persistent_name = name
+
+    try:
+        r = window.rect
+        _persistent_last_rect = (r.x, r.y, r.width, r.height)
+    except Exception:
+        _persistent_last_rect = None
+
+    # Create canvas if needed
+    if not _persistent_canvas:
+        screen = ui.main_screen()
+        _persistent_canvas = Canvas.from_screen(screen)
+        _persistent_canvas.register("draw", on_draw_persistent)
+
+    _persistent_canvas.freeze()
+
+    # Start geometry polling if not already running
+    if not _persistent_poll_job:
+        _persistent_poll_job = cron.interval(PERSISTENT_POLL_INTERVAL, _persistent_check_geometry)
+
+
+def hide_persistent_highlight():
+    """Destroy the persistent canvas and stop polling entirely (feature toggled off)."""
+    global _persistent_canvas, _persistent_window, _persistent_name
+    global _persistent_last_rect, _persistent_poll_job
+
+    if _persistent_poll_job:
+        cron.cancel(_persistent_poll_job)
+        _persistent_poll_job = None
+    if _persistent_canvas:
+        _persistent_canvas.unregister("draw", on_draw_persistent)
+        _persistent_canvas.close()
+        _persistent_canvas = None
+    _persistent_window = None
+    _persistent_name = ""
+    _persistent_last_rect = None
+
+
+def clear_persistent_highlight():
+    """Clear the tracked window but keep the canvas alive (non-recall window focused)."""
+    global _persistent_window, _persistent_name, _persistent_last_rect
+    _persistent_window = None
+    _persistent_name = ""
+    _persistent_last_rect = None
+    if _persistent_canvas:
+        _persistent_canvas.freeze()
+
+
+def rebuild_persistent_canvas():
+    """Rebuild the persistent canvas on a new screen (e.g. monitor change)."""
+    global _persistent_canvas
+    if not _persistent_canvas:
+        return
+    _persistent_canvas.unregister("draw", on_draw_persistent)
+    _persistent_canvas.close()
+    screen = ui.main_screen()
+    _persistent_canvas = Canvas.from_screen(screen)
+    _persistent_canvas.register("draw", on_draw_persistent)
+    _persistent_canvas.freeze()

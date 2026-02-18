@@ -80,6 +80,9 @@ recall purge <user.word>:
 recall (help | show | info):
     user.show_recall_help()
 
+recall border:
+    user.recall_toggle_border()
+
 recall close:
     user.hide_recall_overlay()
 
