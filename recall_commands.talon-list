@@ -1,0 +1,9 @@
+list: user.recall_commands
+-
+# Add your own commands here. The left side is the spoken name,
+# the right side is the shell command that gets typed + Enter.
+#
+# Examples:
+# serve: python -m http.server
+# tests: npm test
+# logs: tail -f /var/log/syslog
