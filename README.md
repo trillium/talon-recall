@@ -10,21 +10,63 @@ Recall lets you save specific windows and switch between them instantly by voice
 "edgar hello world bravely" → switches, types, and presses Enter
 ```
 
+### Saving a window highlights it with a border and name label
+
+![recall assign](images/recall_assign.png)
+
+### "recall list" shows labels on all saved windows
+
+![recall list](images/recall_list.png)
+
+### "recall help" shows a full dashboard with all windows and commands
+
+![recall help](images/recall_help.png)
+
 ## Prerequisites
 
 ### Talon (beta)
 
 Recall requires [Talon](https://talonvoice.com), a hands-free input system. You need the **beta** version, which includes the Conformer speech engine needed for accurate voice recognition.
 
-Talon has a free public version, but the beta provides the speech models that make voice control practical. To get beta access:
+Talon has a free public version, but the beta provides the Conformer speech model that makes voice control practical. To get beta access:
 
 1. **Download Talon** from [talonvoice.com](https://talonvoice.com) (available for Linux, macOS, and Windows)
-2. **Support the developer** on [Patreon](https://www.patreon.com/join/lunixbochs) to unlock beta access — this gets you early features, the Conformer speech model, and priority support
-3. **Link your Patreon** to your Talon account to get beta downloads — instructions are provided after subscribing
+2. **Subscribe to the Talon Beta tier** ($25/month) on [Patreon](https://www.patreon.com/join/lunixbochs) — this gets you beta builds, the Conformer speech model, and priority support. There's also a $5/month VIP tier for Slack access only, and a $100/month Professional tier for those who depend on Talon for work.
+3. **Join the [Talon Slack](https://talonvoice.com/chat)** and message @aegis to link your Patreon — this unlocks beta downloads
 4. **Install the beta** and launch it — you'll see a Talon icon in your system tray
-5. **Download the speech model** — Talon will prompt you on first launch to download the Conformer model, which provides excellent accuracy out of the box
+5. **Download the speech model** — Talon will prompt you on first launch to download the Conformer model, which provides excellent accuracy out of the box. If the prompt doesn't appear, you can install the model manually from the REPL (see [Installing the speech model from the REPL](#installing-the-speech-model-from-the-repl) below).
 
 The [Talon Slack](https://talonvoice.com/chat) community is also an excellent resource for getting help with setup.
+
+### Installing the speech model from the REPL
+
+Hands too busy for menus? Hand this to your AI agent.
+
+If Talon is running but didn't prompt you to download a speech model, you can trigger the download from the REPL. Open it:
+
+```bash
+# Linux
+~/.talon/bin/repl
+
+# macOS
+~/Library/Talon/bin/repl
+```
+
+Then run these commands:
+
+```python
+from talon.plugins.engines.w2l import install_menu
+
+# List available models
+for m in sorted(install_menu.manifests.values()):
+    print(m.name)
+
+# Download Conformer D (the recommended model)
+target = next(m for m in install_menu.manifests.values() if m.name.startswith("Conformer D") and "D2" not in m.name and "de_DE" not in m.name)
+install_menu.install_manifest(target)
+```
+
+The download (~120MB) runs in the background. Once complete, Talon will load the engine automatically. You can verify it's working by speaking — if Talon recognizes your speech, the model is active.
 
 ### No other packages required
 
@@ -128,25 +170,86 @@ This switches to the window and presses the number key. Useful for selecting num
 
 ## All commands
 
+### Core
+
 | Command | What it does |
 |---------|-------------|
 | `"recall assign <name>"` | Save the focused window |
 | `"<name>"` | Switch to a saved window |
 | `"<name> <dictation>"` | Dictate text into a window |
 | `"<name> <dictation> bravely"` | Dictate + press Enter |
+| `"<name> bravely"` | Switch to window + press Enter |
 | `"<name> <number>"` | Press a number key |
 | `"bravely"` | Press Enter (dictation/mixed mode) |
 | `"<dictation> bravely"` | Type + press Enter (dictation/mixed mode) |
-| `"recall restore <name>"` | Relaunch a terminal at saved path |
-| `"recall alias <name>"` | Add an alternate name (prompted) |
-| `"recall combine <name>"` | Merge a duplicate entry (prompted) |
-| `"recall rename <name>"` | Change a window's name (prompted) |
+
+### Aliases and naming
+
+| Command | What it does |
+|---------|-------------|
+| `"recall alias <name> <alias>"` | Add an alternate name |
+| `"recall unalias <name>"` | Remove an alias |
+| `"recall rename <name> <new>"` | Change a window's name |
 | `"recall promote <alias>"` | Make an alias the primary name |
-| `"recall list"` | Flash name labels on all windows |
-| `"recall help"` | Full-screen help panel |
-| `"recall forget <name>"` | Remove a saved window |
-| `"recall forget all"` | Clear everything |
-| `"recall close"` | Dismiss any overlay |
+| `"recall combine <a> <b>"` | Merge b as alias of a |
+
+### Terminal restoration
+
+| Command | What it does |
+|---------|-------------|
+| `"recall restore <name>"` | Relaunch a terminal at saved path |
+| `"recall revive <name>"` | Restore a forgotten/archived terminal |
+
+### Default commands
+
+Recall can run a shell command automatically when restoring a terminal window. Commands are defined in `recall_commands.talon-list`:
+
+```
+list: user.recall_commands
+-
+yolo: yolo
+yolo resume: yolo --resume
+dev server: npm run dev
+build: npm run build
+```
+
+The left side is the spoken name, the right side is the shell command. When restoring a window, Recall waits for the terminal to be ready (detects title change) before typing the command.
+
+| Command | What it does |
+|---------|-------------|
+| `"recall config <name> <command>"` | Set the default command for a window |
+| `"recall config <name> clear"` | Remove the default command |
+| `"recall edit commands"` | Open the commands list in your editor |
+
+### Window lifecycle
+
+When a saved window closes, Recall preserves the entry (name, path, aliases, command) with a cleared window ID. This means `recall restore` can relaunch it later without losing any configuration.
+
+Forgetting a window moves it to an archive rather than deleting it permanently:
+
+| Command | What it does |
+|---------|-------------|
+| `"recall forget <name>"` | Archive a saved window |
+| `"recall forget all"` | Archive everything |
+| `"recall archive"` | Show archived window names |
+| `"recall revive <name>"` | Restore an archived terminal |
+| `"recall purge <name>"` | Permanently delete from archive |
+
+### Overlays
+
+| Command | What it does |
+|---------|-------------|
+| `"recall list"` | Flash name labels on all windows (5s) |
+| `"recall help"` | Full-screen help panel with all windows, metadata, and commands |
+| `"recall close"` | Dismiss any overlay (also Esc key) |
+
+The **help panel** shows each saved window with:
+- Status indicator (green = running, red = closed)
+- Name and aliases
+- App name
+- Assigned command (in accent color)
+- Terminal path or full execution command (`cd /path && command`)
+- Complete command reference
 
 ### Basic keyboard commands
 
@@ -163,6 +266,12 @@ These are included so you can operate without talonhub/community:
 | `"undo"` / `"redo"` | Ctrl+Z / Ctrl+Shift+Z |
 | `"copy this"` / `"paste this"` / `"cut this"` | Clipboard |
 | `"select all"` | Ctrl+A |
+
+## Terminal path tracking
+
+Recall tracks working directories for terminal windows by parsing the window title (the `user@host: /path` pattern set by most shells). It also listens for title changes in real time, so the path stays current as you `cd` around — even if a program like Claude Code later overwrites the terminal title.
+
+Supported terminals: gnome-terminal, mate-terminal, kitty, Alacritty, foot, xfce4-terminal, Terminator, Tilix.
 
 ## Customization
 
@@ -198,9 +307,13 @@ settings():
 
 ## How it works
 
-Recall saves window references (ID, app name, title, terminal path) to `saved_windows.json` in the package directory. When you say a window's name, it finds the window by ID, focuses it, and updates the terminal path if applicable.
+Recall saves window references (ID, app name, title, terminal path, aliases, default command) to `saved_windows.json` in the package directory. When you say a window's name, it finds the window by ID, focuses it, and updates the terminal path if applicable.
 
-For terminals, recall detects the working directory by parsing the window title (e.g., `user@host: /path`) or reading `/proc/<pid>/cwd`. The `restore` command can relaunch a terminal at the saved path if the original was closed.
+For terminals, Recall detects the working directory by parsing the window title (e.g., `user@host: /path`). A real-time title listener captures path changes as they happen, so the saved path stays accurate even when programs overwrite the terminal title.
+
+When a window can't be found by ID, Recall attempts a re-match by app name and title/path before giving up. Closed windows keep their configuration so they can be restored later.
+
+The `restore` command launches a new terminal at the saved path and optionally runs the configured default command once the shell is ready.
 
 ## Using with talonhub/community
 
@@ -210,8 +323,22 @@ If you install [talonhub/community](https://github.com/talonhub/community), reca
 - Number recognition (full range, not just 0-20)
 - Window focusing (with timeout and error handling)
 - Spoken form generation (smarter name matching)
+- File editing (opens in your configured editor)
 
 The `basic_keys.talon` and `modes.talon` files in this package may conflict with community's versions. If you install community, you can safely delete those two files — community provides its own comprehensive key and mode commands.
+
+## Development
+
+### Syncing from the active Talon installation
+
+If you develop recall as part of a larger Talon config and maintain this standalone package separately, use the sync script:
+
+```bash
+cd /path/to/standalone-recall
+.scripts/sync_from_active.sh
+```
+
+This copies the core files from your active installation and checks that all action dependencies are satisfied by the standalone shims in `recall_core.py`.
 
 ## License
 

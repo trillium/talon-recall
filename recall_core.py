@@ -9,9 +9,13 @@ are already registered and these shims gracefully skip registration.
 The recall system will use whichever version is available.
 """
 
+import os
 import re
+import subprocess
+import sys
 import time
-from talon import Module, Context, actions, ui
+from pathlib import Path
+from talon import Module, Context, actions, app, ui
 
 mod = Module()
 ctx = Context()
@@ -97,3 +101,19 @@ class Actions:
                         if word not in result:
                             result[word] = value
         return result
+
+    def edit_text_file(file: str):
+        """Open a file in the user's preferred text editor (cross-platform)."""
+        path = Path(file).resolve()
+        if sys.platform == "win32":
+            try:
+                os.startfile(str(path), "code")
+            except OSError:
+                os.startfile(str(path), "open")
+        elif sys.platform == "darwin":
+            subprocess.Popen(["/usr/bin/open", "-t", str(path)])
+        else:
+            try:
+                subprocess.Popen(["xdg-open", str(path)])
+            except FileNotFoundError:
+                app.notify(f"xdg-open missing. Could not open: {path}")

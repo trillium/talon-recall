@@ -65,6 +65,31 @@ def _get_saved_windows():
     return saved_windows, find_window_by_id
 
 
+def _resolve_command_display(stored: str) -> str:
+    """Resolve a stored command to its spoken name for display.
+    If stored as a shell command, reverse-lookup the spoken name."""
+    from .recall import ctx
+    commands = ctx.lists.get("user.recall_commands", {})
+    if stored in commands:
+        return stored
+    for spoken, shell_cmd in commands.items():
+        if shell_cmd == stored:
+            return spoken
+    return stored
+
+
+def _resolve_command_shell(stored: str) -> str | None:
+    """Resolve a stored command to the actual shell command it will run."""
+    from .recall import ctx
+    commands = ctx.lists.get("user.recall_commands", {})
+    if stored in commands:
+        return commands[stored]
+    for spoken, shell_cmd in commands.items():
+        if shell_cmd == stored:
+            return shell_cmd
+    return stored
+
+
 def _update_overlay_tag():
     """Set or clear the overlay_visible tag based on active canvases."""
     from .recall import overlay_ctx
@@ -74,12 +99,25 @@ def _update_overlay_tag():
         overlay_ctx.tags = []
 
 
+def _pills_overlap(a: Rect, b: Rect) -> bool:
+    """Check if two pill rects overlap."""
+    return (a.x < b.x + b.width and a.x + a.width > b.x and
+            a.y < b.y + b.height and a.y + a.height > b.y)
+
+
 def on_draw(c: SkiaCanvas):
     saved_windows, find_window_by_id = _get_saved_windows()
     screen = ui.main_screen()
 
+    try:
+        active_id = ui.active_window().id
+    except Exception:
+        active_id = None
+
     missing_y_offset = 80  # start below top bar area
 
+    # First pass: compute pill positions
+    pills = []  # [(name, pill_rect, text_x, text_y, bg_color, text_color)]
     for name, info in saved_windows.items():
         window = find_window_by_id(info["id"])
 
@@ -96,6 +134,8 @@ def on_draw(c: SkiaCanvas):
             if rect.width <= 0 or rect.height <= 0:
                 continue
 
+            is_active = (info["id"] == active_id)
+
             # Center label on window
             center_x = rect.x + rect.width / 2
             center_y = rect.y + rect.height / 2
@@ -103,10 +143,10 @@ def on_draw(c: SkiaCanvas):
             pill_y = center_y - pill_h / 2
             text_x = center_x - text_w / 2
             text_y = center_y + text_h / 2
-            bg_color = "000000bb"
+            bg_color = "6a6affcc" if is_active else "000000bb"
             text_color = "ffffffff"
         else:
-            # Show missing windows at top-center of screen in red
+            is_active = False
             display = f"{name} (not found)"
             c.paint.textsize = FONT_SIZE
             text_rect = c.paint.measure_text(display)[1]
@@ -125,15 +165,28 @@ def on_draw(c: SkiaCanvas):
             name = display
             missing_y_offset += pill_h + MISSING_GAP
 
-        # Draw background
+        pill_rect = Rect(pill_x, pill_y, pill_w, pill_h)
+
+        # Nudge if overlapping any existing pill
+        for _, existing_rect, _, _, _, _ in pills:
+            if _pills_overlap(pill_rect, existing_rect):
+                # Shift below the existing pill
+                pill_y = existing_rect.y + existing_rect.height + MISSING_GAP
+                text_y = pill_y + PAD_Y + text_h
+                pill_rect = Rect(pill_x, pill_y, pill_w, pill_h)
+
+        pills.append((name, pill_rect, text_x, text_y, bg_color, text_color))
+
+    # Second pass: draw
+    for name, pill_rect, text_x, text_y, bg_color, text_color in pills:
         c.paint.style = c.paint.Style.FILL
         c.paint.color = bg_color
-        _draw_rounded_rect(c, Rect(pill_x, pill_y, pill_w, pill_h), PILL_CORNER_RADIUS)
+        _draw_rounded_rect(c, pill_rect, PILL_CORNER_RADIUS)
 
-        # Draw text
         c.paint.style = c.paint.Style.FILL
         c.paint.color = text_color
-        c.draw_text(name, text_x, text_y)
+        c.paint.textsize = FONT_SIZE
+        c.draw_text(name, pill_rect.x + PAD_X, text_y)
 
 
 def show_overlay():
@@ -187,9 +240,10 @@ HELP_COMMANDS = [
     ('"<name> <dictation>"', "dictate into window"),
     ('"<name> <dictation> <ender>"', "dictate + Enter"),
     ('"recall restore <name>"', "relaunch terminal"),
-    ('"recall alias <name> …"', "add alias"),
+    ('"recall alias <name> <alias>"', "add alias"),
+    ('"recall unalias <alias>"', "remove alias"),
     ('"recall combine <a> <b>"', "merge b as alias of a"),
-    ('"recall rename <name> <new>"', "change canonical name"),
+    ('"recall rename <name> <new>"', "rename window"),
     ('"recall promote <alias>"', "make alias the primary name"),
     ('"recall list"', "show labels on windows"),
     ('"recall help"', "this screen"),
@@ -225,9 +279,9 @@ def on_draw_help(c: SkiaCanvas):
     )
     for name in window_names:
         info = saved_windows[name]
-        y_cursor += HELP_NAME_SIZE + 8  # name line (aliases now inline)
-        if info.get("path"):
-            y_cursor += HELP_DETAIL_SIZE + 4
+        y_cursor += HELP_NAME_SIZE + 8  # name line (aliases + app + command)
+        if info.get("path") or info.get("command"):
+            y_cursor += HELP_DETAIL_SIZE + 4  # execution line
         y_cursor += HELP_ROW_PAD  # row gap (includes separator)
 
     if window_names:
@@ -303,25 +357,46 @@ def on_draw_help(c: SkiaCanvas):
         c.paint.color = HELP_GREEN if window else HELP_RED
         c.draw_circle(dot_x, dot_y, dot_radius)
 
-        # Name + aliases as one string: name / alias1 / alias2    AppName
+        # Name line: name / aliases    AppName    [command_name]
         name_x = cx + dot_radius * 2 + 12
         aliases = info.get("aliases", [])
         all_names = " / ".join([name] + aliases)
         app_name = info.get("app", "")
+        command = info.get("command")
+
+        # Draw name + app in white
+        name_part = all_names
         if app_name:
-            display = f"{all_names}    {app_name}"
-        else:
-            display = all_names
+            name_part += f"    {app_name}"
 
         c.paint.textsize = HELP_NAME_SIZE
         c.paint.color = HELP_TEXT_COLOR
-        c.draw_text(display, name_x, cy + HELP_NAME_SIZE)
+        c.draw_text(name_part, name_x, cy + HELP_NAME_SIZE)
+
+        # Append command name in accent color after the name line
+        if command:
+            display_cmd = _resolve_command_display(command)
+            name_part_w = c.paint.measure_text(name_part)[1].width
+            c.paint.color = HELP_ACCENT
+            c.draw_text(f"    {display_cmd}", name_x + name_part_w, cy + HELP_NAME_SIZE)
 
         cy += HELP_NAME_SIZE + 8
 
-        # Path
+        # Detail line: full execution command or just path
         path = info.get("path")
-        if path:
+        if command and path:
+            shell_cmd = _resolve_command_shell(command)
+            c.paint.textsize = HELP_DETAIL_SIZE
+            c.paint.color = HELP_DIM_COLOR
+            c.draw_text(f"cd {path} && {shell_cmd}", name_x, cy + HELP_DETAIL_SIZE)
+            cy += HELP_DETAIL_SIZE + 4
+        elif command:
+            shell_cmd = _resolve_command_shell(command)
+            c.paint.textsize = HELP_DETAIL_SIZE
+            c.paint.color = HELP_DIM_COLOR
+            c.draw_text(f"$ {shell_cmd}", name_x, cy + HELP_DETAIL_SIZE)
+            cy += HELP_DETAIL_SIZE + 4
+        elif path:
             c.paint.textsize = HELP_DETAIL_SIZE
             c.paint.color = HELP_DIM_COLOR
             c.draw_text(path, name_x, cy + HELP_DETAIL_SIZE)
@@ -507,13 +582,16 @@ def hide_prompt():
 _flash_canvas: Canvas = None
 _flash_hide_job = None
 _flash_message: str = ""
+_flash_subtitle: str = ""
 FLASH_DURATION = "2500ms"
 FLASH_FONT_SIZE = 20
+FLASH_SUB_SIZE = 14
 FLASH_PAD_X = 28
 FLASH_PAD_Y = 16
 FLASH_BG = "1a1a2eee"
 FLASH_BORDER = "6a6aff"
 FLASH_TEXT = "ffffffff"
+FLASH_SUB_COLOR = "aaaaaa"
 FLASH_CORNER = 12
 
 
@@ -526,8 +604,20 @@ def on_draw_flash(c: SkiaCanvas):
     text_w = text_rect.width
     text_h = text_rect.height
 
-    pill_w = text_w + FLASH_PAD_X * 2
+    # Measure subtitle if present
+    sub_w = 0
+    sub_h = 0
+    if _flash_subtitle:
+        c.paint.textsize = FLASH_SUB_SIZE
+        sub_rect = c.paint.measure_text(_flash_subtitle)[1]
+        sub_w = sub_rect.width
+        sub_h = sub_rect.height
+
+    pill_w = max(text_w, sub_w) + FLASH_PAD_X * 2
     pill_h = text_h + FLASH_PAD_Y * 2
+    if _flash_subtitle:
+        pill_h += sub_h + 8  # gap between lines
+
     pill_x = sr.x + (sr.width - pill_w) / 2
     pill_y = sr.y + sr.height * 0.35 - pill_h / 2
 
@@ -544,18 +634,25 @@ def on_draw_flash(c: SkiaCanvas):
     _draw_rounded_rect(c, pill_rect, FLASH_CORNER)
     c.paint.style = c.paint.Style.FILL
 
-    # Text
+    # Main text
     c.paint.color = FLASH_TEXT
     c.paint.textsize = FLASH_FONT_SIZE
     text_x = pill_x + FLASH_PAD_X
     text_y = pill_y + FLASH_PAD_Y + text_h
     c.draw_text(_flash_message, text_x, text_y)
 
+    # Subtitle
+    if _flash_subtitle:
+        c.paint.color = FLASH_SUB_COLOR
+        c.paint.textsize = FLASH_SUB_SIZE
+        c.draw_text(_flash_subtitle, text_x, text_y + sub_h + 8)
 
-def flash(message: str):
-    """Show a brief centered notification pill."""
-    global _flash_canvas, _flash_hide_job, _flash_message
+
+def flash(message: str, subtitle: str = ""):
+    """Show a brief centered notification pill with optional subtitle."""
+    global _flash_canvas, _flash_hide_job, _flash_message, _flash_subtitle
     _flash_message = message
+    _flash_subtitle = subtitle
 
     if _flash_hide_job:
         cron.cancel(_flash_hide_job)
@@ -584,3 +681,113 @@ def hide_flash():
         _flash_canvas.unregister("draw", on_draw_flash)
         _flash_canvas.close()
         _flash_canvas = None
+
+
+# ── Window capture highlight ─────────────────────────────────────────
+
+_highlight_canvas: Canvas = None
+_highlight_hide_job = None
+_highlight_window = None
+_highlight_name: str = ""
+HIGHLIGHT_DURATION = "800ms"
+HIGHLIGHT_COLOR = "6a6aff"
+HIGHLIGHT_STROKE = 4
+HIGHLIGHT_LABEL_SIZE = 16
+HIGHLIGHT_LABEL_PAD_X = 10
+HIGHLIGHT_LABEL_PAD_Y = 6
+
+
+def on_draw_highlight(c: SkiaCanvas):
+    if not _highlight_window:
+        return
+    try:
+        r = _highlight_window.rect
+    except Exception:
+        return
+    if r.width <= 0 or r.height <= 0:
+        return
+
+    # Border around the window (live rect)
+    c.paint.style = c.paint.Style.STROKE
+    c.paint.stroke_width = HIGHLIGHT_STROKE
+    c.paint.color = HIGHLIGHT_COLOR
+    c.draw_rect(Rect(r.x, r.y, r.width, r.height))
+    c.paint.style = c.paint.Style.FILL
+
+    # Name label pill at top-center of window
+    if _highlight_name:
+        c.paint.textsize = HIGHLIGHT_LABEL_SIZE
+        text_rect = c.paint.measure_text(_highlight_name)[1]
+        text_w = text_rect.width
+        text_h = text_rect.height
+
+        pill_w = text_w + HIGHLIGHT_LABEL_PAD_X * 2
+        pill_h = text_h + HIGHLIGHT_LABEL_PAD_Y * 2
+        pill_x = r.x + r.width / 2 - pill_w / 2
+        pill_y = r.y - pill_h - 2
+
+        # Clamp above screen top
+        if pill_y < 0:
+            pill_y = r.y + 4
+
+        # Background
+        c.paint.color = HIGHLIGHT_COLOR
+        pill_rect = Rect(pill_x, pill_y, pill_w, pill_h)
+        _draw_rounded_rect(c, pill_rect, 6)
+
+        # Text
+        c.paint.color = "ffffffff"
+        c.draw_text(_highlight_name, pill_x + HIGHLIGHT_LABEL_PAD_X, pill_y + HIGHLIGHT_LABEL_PAD_Y + text_h)
+
+
+_highlight_show_job = None
+
+
+def highlight_window(window, name: str):
+    """Briefly highlight a window border to confirm capture.
+
+    Delays 50ms to let the window manager finish positioning,
+    then draws a single frozen frame at the window's settled rect.
+    """
+    global _highlight_window, _highlight_name, _highlight_show_job
+
+    _highlight_window = window
+    _highlight_name = name
+
+    # Cancel any pending show/hide from a previous highlight
+    if _highlight_show_job:
+        cron.cancel(_highlight_show_job)
+    hide_highlight()
+
+    # Delay canvas creation so the WM has time to position the window
+    _highlight_show_job = cron.after("100ms", _show_highlight)
+
+
+def _show_highlight():
+    """Create and freeze the highlight canvas."""
+    global _highlight_canvas, _highlight_hide_job, _highlight_show_job
+    _highlight_show_job = None
+
+    if _highlight_canvas:
+        _highlight_canvas.unregister("draw", on_draw_highlight)
+        _highlight_canvas.close()
+        _highlight_canvas = None
+
+    screen: Screen = ui.main_screen()
+    _highlight_canvas = Canvas.from_screen(screen)
+    _highlight_canvas.register("draw", on_draw_highlight)
+    _highlight_canvas.freeze()
+
+    _highlight_hide_job = cron.after(HIGHLIGHT_DURATION, hide_highlight)
+
+
+def hide_highlight():
+    """Hide the window highlight."""
+    global _highlight_canvas, _highlight_hide_job
+    if _highlight_hide_job:
+        cron.cancel(_highlight_hide_job)
+        _highlight_hide_job = None
+    if _highlight_canvas:
+        _highlight_canvas.unregister("draw", on_draw_highlight)
+        _highlight_canvas.close()
+        _highlight_canvas = None
