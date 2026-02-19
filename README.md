@@ -1,14 +1,25 @@
 # Recall — Name Your Windows, Control Them by Voice
 
-Recall lets you save specific windows and switch between them instantly by voice. Instead of "focus Chrome" bringing up a random Chrome window, you name the one you care about and speak its name to get it back.
+Recall lets you save specific windows and switch between them instantly by voice. Keeping track of which window has which conversation gets pretty hard mentally when you're juggling a lot of agent coding windows. Naming them is a lot easier and lets you interact with windows more naturally, with less mental friction.
+
+Give a specific window a specific name — for example, I use "mary" for my massage therapy booking application (they both start with MA, it works for my brain). Whenever I want to discuss features related to that project, I just start my sentence with the name:
 
 ```
-"recall assign edgar"     → saves the focused window as "edgar"
-"edgar"                   → switches to it instantly
-"edgar hello world"       → switches and types "hello world"
-"edgar 1"                 → switches and presses the 1 key
-"edgar hello world bravely" → switches, types, and presses Enter
+"recall assign mary"        → saves the focused window as "mary"
+"mary"                      → switches to it instantly
+"mary what is the status?"  → switches and types the question
+"mary 1"                    → switches and presses the 1 key
+"mary commit and push bravely" → switches, types, and presses Enter
 ```
+
+## Branches
+
+| Branch | Who it's for | What's included |
+|--------|-------------|-----------------|
+| **`main`** | Talon users with [talonhub/community](https://github.com/talonhub/community) already installed | Just the recall plugin — relies on community for dictation, keys, formatting, etc. |
+| **`standalone`** | New to Talon Voice, no existing setup | Everything bundled — recall plus all the community dependencies needed to get started from scratch |
+
+If you already use Talon, use `main`. If you're new to Talon and want to try voice control with minimal setup, use `standalone`.
 
 ## Table of contents
 
