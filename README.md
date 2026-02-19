@@ -45,11 +45,11 @@ Hands too busy for menus? Hand this to your AI agent.
 If Talon is running but didn't prompt you to download a speech model, you can trigger the download from the REPL. Open it:
 
 ```bash
-# Linux
+# macOS / Linux
 ~/.talon/bin/repl
 
-# macOS
-~/Library/Talon/bin/repl
+# Windows
+%APPDATA%\Talon\bin\repl
 ```
 
 Then run these commands:
@@ -86,11 +86,11 @@ If you later install [talonhub/community](https://github.com/talonhub/community)
 Clone or download this repo into your Talon user directory:
 
 ```bash
-# Linux
+# macOS / Linux
 git clone https://github.com/trillium/talon-recall ~/.talon/user/recall
 
-# macOS
-git clone https://github.com/trillium/talon-recall ~/Library/Talon/user/recall
+# Windows
+git clone https://github.com/trillium/talon-recall "%APPDATA%\Talon\user\recall"
 ```
 
 Talon will automatically load the package. You should see a small colored dot at the top-center of your screen — that's the mode indicator.
