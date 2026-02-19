@@ -1,8 +1,0 @@
-window next: app.window_next()
-window (last | previous): app.window_previous()
-focus <user.running_applications>: user.switcher_focus(running_applications)
-focus last: user.switcher_focus_last()
-^(lastly | lasty | windy)$: user.switcher_focus_last()
-running list: user.switcher_toggle_running()
-running close: user.switcher_hide_running()
-launch <user.launch_applications>: user.switcher_launch(launch_applications)
