@@ -46,10 +46,10 @@ Clone this repo into your Talon user directory:
 
 ```bash
 # macOS / Linux
-git clone https://github.com/trillium/talon-recall ~/.talon/user/recall
+git clone https://github.com/trillium/talon_recall ~/.talon/user/recall
 
 # Windows
-git clone https://github.com/trillium/talon-recall "%APPDATA%\Talon\user\recall"
+git clone https://github.com/trillium/talon_recall "%APPDATA%\Talon\user\recall"
 ```
 
 Talon will automatically load the package.
